@@ -2,3 +2,5 @@ torch
 numpy
 matplotlib
 ipykernel
+datasets
+torchvision
