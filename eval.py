@@ -10,5 +10,5 @@ def correct_preds(logits: Tensor, labels: Tensor) -> int:
     Returns:
         An integer representing the number of correct predictions
     """
-    return (logits.argmax(dim=1) == labels).sum()
+    return (logits.argmax(dim=1) == labels).sum().item()
     
