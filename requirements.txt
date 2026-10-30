@@ -4,3 +4,4 @@ matplotlib
 ipykernel
 datasets
 torchvision
+tqdm
