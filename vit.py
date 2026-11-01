@@ -48,6 +48,9 @@ class MultiHeadAttention(nn.Module):
         # (B, n_heads, T, T)
         attn_scores = torch.softmax((Q @ K.transpose(-1, -2)) / math.sqrt(self.head_embd_size), dim = -1)
         z = attn_scores @ V # (B, n_heads, T, head_embd_size)
+
+        # z = nn.functional.scaled_dot_product_attention(Q, K, V)
+
         z = z.transpose(1, 2).reshape(B, T, -1) # (B, T, n_heads * head_embd_size) = (B, T, embd_size)
         z = self.W_O(z) # (B, T, embd_size)
 
@@ -189,11 +192,11 @@ class ViTConfig:
         input_shape: Tuple containing the height, width, and channels of the input images.
         output_size: Number of image classes.
     """
-    n_heads: int = 4
-    embd_size: int = 64
+    n_heads: int = 2
+    embd_size: int = 32
     patch_size: int = 2
-    dropout: float = 0.25
-    num_encoders: int = 4
+    dropout: float = 0.2
+    num_encoders: int = 2
     input_shape: tuple = (32, 32, 3)
     output_size: int = 10
 
@@ -217,7 +220,15 @@ class ViT(nn.Module):
         num_patches = H*W // config.patch_size**2
 
 
-        self.E = nn.Linear(config.patch_size**2 * C, config.embd_size, bias=False)
+        # self.E = nn.Linear(config.patch_size**2 * C, config.embd_size, bias=False)
+        # instead of extracting patches and applying a linear layer, we can apply a Conv2d with
+        # kernel_size = patch_size, stride = patch_size, and filters = embd_size
+        self.patch_conv = nn.Conv2d(
+            in_channels=C, 
+            out_channels=config.embd_size, 
+            kernel_size=self.patch_size, 
+            stride=self.patch_size
+        )
         self.E_pos = nn.Parameter(torch.randn(size = (1, num_patches+1, config.embd_size)))
         
         # the 1's are for the B and T dimensions
@@ -245,14 +256,16 @@ class ViT(nn.Module):
 
         B, C, H, W = x.shape
 
-        image_patches = torch.stack([
-            x[:, :, i:i+self.patch_size, j:j+self.patch_size].reshape(B, -1) # (B, P*P*C)
-            for j in range(0, W, self.patch_size)
-            for i in range(0, H, self.patch_size)
-        ], dim = 1) # (B, num_patches, P*P*C)
+        # image_patches = torch.stack([
+        #     x[:, :, i:i+self.patch_size, j:j+self.patch_size].reshape(B, -1) # (B, P*P*C)
+        #     for j in range(0, W, self.patch_size)
+        #     for i in range(0, H, self.patch_size)
+        # ], dim = 1) # (B, num_patches, P*P*C)
 
-        patch_embeddings = self.E(image_patches) # (B, num_patches, embd_size)
+        # patch_embeddings = self.E(image_patches) # (B, num_patches, embd_size)
 
+        patch_embeddings = self.patch_conv(x) # (B, embd_size, H/patch_size, W/patch_size)
+        patch_embeddings = patch_embeddings.reshape(B, self.config.embd_size, -1).transpose(1, 2)
 
         patch_embeddings = torch.cat(
             [self.CLS.expand(B, -1, -1), patch_embeddings],
