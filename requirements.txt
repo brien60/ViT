@@ -5,3 +5,5 @@ ipykernel
 datasets
 torchvision
 tqdm
+ipywidgets
+jupyter
