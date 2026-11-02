@@ -9,7 +9,7 @@ from dataclasses import dataclass
 class MultiHeadAttention(nn.Module):
     """Models a mutli-head self-attention block for an Encoder"""
 
-    def __init__(self, n_heads: int, embd_size: int) -> None:
+    def __init__(self, n_heads: int, embd_size: int, dropout: float = 0.0) -> None:
         """Initializes the multi-head self-attention block.
         
         Args:
@@ -29,6 +29,8 @@ class MultiHeadAttention(nn.Module):
         # Linearly combines the output from each attention head
         self.W_O = nn.Linear(self.embd_size, self.embd_size)
 
+        self.attn_dropout = nn.Dropout(dropout)
+
 
     def forward(self, x: Tensor) -> Tensor:
         """Computes mutli-head self-attention over the input token sequence.
@@ -47,6 +49,8 @@ class MultiHeadAttention(nn.Module):
 
         # (B, n_heads, T, T)
         attn_scores = torch.softmax((Q @ K.transpose(-1, -2)) / math.sqrt(self.head_embd_size), dim = -1)
+        attn_scores = self.attn_dropout(attn_scores)
+
         z = attn_scores @ V # (B, n_heads, T, head_embd_size)
 
         # z = nn.functional.scaled_dot_product_attention(Q, K, V)
@@ -149,7 +153,7 @@ class EncoderBlock(nn.Module):
         """
         super().__init__()
         self.ln = nn.LayerNorm(embd_size)
-        self.msa = MultiHeadAttention(n_heads, embd_size)
+        self.msa = MultiHeadAttention(n_heads, embd_size, dropout=dropout)
         self.mlp = MLP(embd_size, 4*embd_size, dropout=dropout)
         self.mlp_dropout = nn.Dropout(dropout)
 
@@ -192,11 +196,11 @@ class ViTConfig:
         input_shape: Tuple containing the height, width, and channels of the input images.
         output_size: Number of image classes.
     """
-    n_heads: int = 2
-    embd_size: int = 32
+    n_heads: int = 4
+    embd_size: int = 64
     patch_size: int = 2
     dropout: float = 0.2
-    num_encoders: int = 2
+    num_encoders: int = 4
     input_shape: tuple = (32, 32, 3)
     output_size: int = 10
 
