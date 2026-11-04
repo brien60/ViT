@@ -197,7 +197,7 @@ class ViTConfig:
         output_size: Number of image classes.
     """
     n_heads: int = 4
-    embd_size: int = 64
+    embd_size: int = 128
     patch_size: int = 2
     dropout: float = 0.2
     num_encoders: int = 4
