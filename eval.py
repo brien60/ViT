@@ -66,8 +66,8 @@ def evaluate_train_and_val(
             val_correct_preds += correct_preds(logits, y_val)
 
     plot_metrics["val_losses"].append(val_loss / len(val_DL))
-    plot_metrics["train_accs"].append(100 * train_correct_preds / len(num_train_samples))
-    plot_metrics["val_accs"].append(100 * val_correct_preds / len(num_val_samples))
+    plot_metrics["train_accs"].append(100 * train_correct_preds / num_train_samples)
+    plot_metrics["val_accs"].append(100 * val_correct_preds / num_val_samples)
     plot_metrics["val_epochs"].append(epoch+1)
 
 
