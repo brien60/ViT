@@ -12,12 +12,11 @@ def evaluate_train_and_val(
         num_val_samples: int,
         loss_fn: Module,
         device: str,
-        epoch: int,
         plot_metrics: dict[str, list]
-    ):
-    """Computes the training accuracy, validation accuracy, and the validation loss
-    on the given model using the clean (no data augmentations) train and validation 
-    dataloaders. 
+    ) -> None:
+    """Computes the training accuracy, validation accuracy, and the validation loss on the given model using the clean 
+
+    (no data augmentations) train and validation dataloaders. 
 
     Args:
         model: Model that the dataloaders will be evaluated on
@@ -33,8 +32,6 @@ def evaluate_train_and_val(
         loss_fn: Loss function used to evaluate the model
 
         device: Device on which the model is stored
-
-        epoch: Current epoch in the training loop
 
         plot_metrics: Dictionary mapping the name of the metric to a list containing the metric's value for every previous epoch 
     """
@@ -68,7 +65,7 @@ def evaluate_train_and_val(
     plot_metrics["val_losses"].append(val_loss / len(val_DL))
     plot_metrics["train_accs"].append(100 * train_correct_preds / num_train_samples)
     plot_metrics["val_accs"].append(100 * val_correct_preds / num_val_samples)
-    plot_metrics["val_epochs"].append(epoch+1)
+    plot_metrics["val_epochs"].append(len(plot_metrics["val_epochs"]) + 1)
 
 
 
