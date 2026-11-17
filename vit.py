@@ -55,7 +55,8 @@ class MultiHeadAttention(nn.Module):
         # z = attn_scores @ V # (B, n_heads, T, head_embd_size)
 
         # use flash attention instead
-        z = nn.functional.scaled_dot_product_attention(Q, K, V, dropout_p=self.dropout)
+        dropout_p = self.dropout if self.training else 0.0
+        z = nn.functional.scaled_dot_product_attention(Q, K, V, dropout_p=dropout_p)
 
         z = z.transpose(1, 2).reshape(B, T, -1) # (B, T, n_heads * head_embd_size) = (B, T, embd_size)
         z = self.W_O(z) # (B, T, embd_size)
@@ -241,9 +242,11 @@ class ViT(nn.Module):
         self.CLS = nn.Parameter(torch.randn(size = (1, 1, config.embd_size)))
 
         self.encoders = nn.ModuleList(
-            config.num_encoders * [EncoderBlock(config.n_heads, config.embd_size, config.dropout)]
+            [EncoderBlock(config.n_heads, config.embd_size, config.dropout) 
+            for _ in range(config.num_encoders)]
         )
 
+        self.cls_LN = nn.LayerNorm(config.embd_size)
         self.classifier = Classifier(config.embd_size, 4*config.embd_size, config.output_size)
 
 
@@ -282,4 +285,5 @@ class ViT(nn.Module):
         for encoder in self.encoders:
             z = encoder(z)
 
-        return self.classifier(z[:, 0], fine_tune)
+        z = self.cls_LN(z[:, 0])
+        return self.classifier(z, fine_tune)

@@ -7,3 +7,7 @@ A from-scratch implementation of a Vision Transformer (ViT) in PyTorch, based on
 Experiment with different lr schedulers, try CosineAnnealingLR before warm restarts
 
 Make sure data augmentations are in the correct order
+
+Did not actually create separate EncoderBlocks, instead just copied a single one `num_encoder` times.
+
+Remember dropout should always be switched off for eval (flash attention dropout)
