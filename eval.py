@@ -1,6 +1,7 @@
 import torch
+
 from torch.nn import Module
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch import Tensor
 
 
@@ -12,11 +13,14 @@ def evaluate_train_and_val(
         num_val_samples: int,
         loss_fn: Module,
         device: str,
-        plot_metrics: dict[str, list]
+        plot_metrics: dict[str, list],
+        train_eval_samples: int = None,
     ) -> None:
     """Computes the training accuracy, validation accuracy, and the validation loss on the given model using the clean 
 
     (no data augmentations) train and validation dataloaders. 
+    
+    Can optionally pass in `train_eval_samples` to set the number of training samples to compute accuracy on.
 
     Args:
         model: Model that the dataloaders will be evaluated on
@@ -34,7 +38,24 @@ def evaluate_train_and_val(
         device: Device on which the model is stored
 
         plot_metrics: Dictionary mapping the name of the metric to a list containing the metric's value for every previous epoch 
+
+        train_eval_samples: Number of training samples to evaluate on
     """
+    train_eval_DL = clean_train_DL
+
+    if train_eval_samples is not None:
+        indices = torch.randperm(num_train_samples)[:train_eval_samples].tolist()
+
+        train_eval_subset = Subset(clean_train_DL.dataset, indices)
+
+        train_eval_DL = DataLoader(
+            train_eval_subset,
+            batch_size=clean_train_DL.batch_size,
+            shuffle=False,
+            num_workers=clean_train_DL.num_workers,
+            pin_memory=clean_train_DL.pin_memory
+        )
+
     train_correct_preds = 0
     
     val_correct_preds = 0
@@ -44,7 +65,7 @@ def evaluate_train_and_val(
 
     # must go here because dropout should be disabled
     with torch.inference_mode():
-        for train_batch in clean_train_DL:
+        for train_batch in train_eval_DL:
             x_train, y_train = train_batch
             x_train, y_train = x_train.to(device), y_train.to(device)
 
@@ -63,7 +84,7 @@ def evaluate_train_and_val(
             val_correct_preds += correct_preds(logits, y_val)
 
     plot_metrics["val_losses"].append(val_loss / len(val_DL))
-    plot_metrics["train_accs"].append(100 * train_correct_preds / num_train_samples)
+    plot_metrics["train_accs"].append(100 * train_correct_preds / len(train_eval_DL.dataset))
     plot_metrics["val_accs"].append(100 * val_correct_preds / num_val_samples)
     plot_metrics["val_epochs"].append(len(plot_metrics["val_epochs"]) + 1)
 

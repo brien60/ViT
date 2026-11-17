@@ -29,7 +29,8 @@ class MultiHeadAttention(nn.Module):
         # Linearly combines the output from each attention head
         self.W_O = nn.Linear(self.embd_size, self.embd_size)
 
-        self.attn_dropout = nn.Dropout(dropout)
+        # self.attn_dropout = nn.Dropout(dropout)
+        self.dropout = dropout
 
 
     def forward(self, x: Tensor) -> Tensor:
@@ -48,12 +49,13 @@ class MultiHeadAttention(nn.Module):
         Q, K, V = qkv.split(self.head_embd_size, dim = -1) # (B, n_heads, T, head_embd_size)
 
         # (B, n_heads, T, T)
-        attn_scores = torch.softmax((Q @ K.transpose(-1, -2)) / math.sqrt(self.head_embd_size), dim = -1)
-        attn_scores = self.attn_dropout(attn_scores)
+        # attn_scores = torch.softmax((Q @ K.transpose(-1, -2)) / math.sqrt(self.head_embd_size), dim = -1)
+        # attn_scores = self.attn_dropout(attn_scores)
 
-        z = attn_scores @ V # (B, n_heads, T, head_embd_size)
+        # z = attn_scores @ V # (B, n_heads, T, head_embd_size)
 
-        # z = nn.functional.scaled_dot_product_attention(Q, K, V)
+        # use flash attention instead
+        z = nn.functional.scaled_dot_product_attention(Q, K, V, dropout_p=self.dropout)
 
         z = z.transpose(1, 2).reshape(B, T, -1) # (B, T, n_heads * head_embd_size) = (B, T, embd_size)
         z = self.W_O(z) # (B, T, embd_size)
