@@ -155,7 +155,9 @@ class EncoderBlock(nn.Module):
             embd_size: Dimension size of the patch embeddings
         """
         super().__init__()
-        self.ln = nn.LayerNorm(embd_size)
+        self.attn_ln = nn.LayerNorm(embd_size)
+        self.mlp_ln = nn.LayerNorm(embd_size)
+
         self.msa = MultiHeadAttention(n_heads, embd_size, dropout=dropout)
         self.mlp = MLP(embd_size, 4*embd_size, dropout=dropout)
         self.mlp_dropout = nn.Dropout(dropout)
@@ -180,8 +182,8 @@ class EncoderBlock(nn.Module):
         Returns:
             A tensor of shape (B, T, embd_size)
         """
-        z_attn = self.msa(self.ln(x)) + x
-        z = self.mlp(self.ln(z_attn))
+        z_attn = self.msa(self.attn_ln(x)) + x
+        z = self.mlp(self.mlp_ln(z_attn))
         z = self.mlp_dropout(z)
 
         return z + z_attn
@@ -246,7 +248,7 @@ class ViT(nn.Module):
             for _ in range(config.num_encoders)]
         )
 
-        self.cls_LN = nn.LayerNorm(config.embd_size)
+        self.cls_ln = nn.LayerNorm(config.embd_size)
         self.classifier = Classifier(config.embd_size, 4*config.embd_size, config.output_size)
 
 
@@ -285,5 +287,5 @@ class ViT(nn.Module):
         for encoder in self.encoders:
             z = encoder(z)
 
-        z = self.cls_LN(z[:, 0])
+        z = self.cls_ln(z[:, 0])
         return self.classifier(z, fine_tune)

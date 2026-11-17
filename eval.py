@@ -79,14 +79,53 @@ def evaluate_train_and_val(
             logits = model(x_val)
 
             loss = loss_fn(logits, y_val)
-            val_loss += loss.item()
+            val_loss += loss.item() * len(x_val)
             
             val_correct_preds += correct_preds(logits, y_val)
 
-    plot_metrics["val_losses"].append(val_loss / len(val_DL))
+    plot_metrics["val_losses"].append(val_loss / len(val_DL.dataset))
     plot_metrics["train_accs"].append(100 * train_correct_preds / len(train_eval_DL.dataset))
     plot_metrics["val_accs"].append(100 * val_correct_preds / num_val_samples)
     plot_metrics["val_epochs"].append(len(plot_metrics["val_epochs"]) + 1)
+
+
+
+def test_model(
+        model: Module, 
+        test_DL: DataLoader, 
+        loss_fn: Module,
+        device: str,
+    ) -> None:
+    """Computes and prints the test accuracy and test loss on the given model using the clean (no data augmentations) test dataloader.
+
+    Args:
+        model: Model that the dataloaders will be evaluated on
+
+        test_DL: DataLoader containing test data batches. Does not apply data augmentation transformations applied these batches.
+
+        loss_fn: Loss function used to evaluate the model
+
+        device: Device on which the model is stored
+    """
+
+    test_correct_preds = 0
+    test_loss = 0.0
+
+    model.eval()
+    
+    with torch.inference_mode():
+        for test_batch in test_DL:
+            x_test, y_test = test_batch
+            x_test, y_test = x_test.to(device), y_test.to(device)
+
+            logits = model(x_test)
+            loss = loss_fn(logits, y_test)
+            test_loss += loss.item() * len(x_test)
+            
+            test_correct_preds += correct_preds(logits, y_test)
+
+    print(test_correct_preds / len(test_DL.dataset))
+    print(test_loss / len(test_DL.dataset))
 
 
 
@@ -101,4 +140,5 @@ def correct_preds(logits: Tensor, labels: Tensor) -> int:
         An integer representing the number of correct predictions
     """
     return (logits.argmax(dim=1) == labels).sum().item()
+
     

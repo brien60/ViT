@@ -94,7 +94,7 @@ def train_model(
         logits = model(x_train)
 
         loss = loss_fn(logits, y_train)
-        train_loss += loss.item()
+        train_loss += loss.item() * len(x_train)
 
         loss.backward()
         optimizer.step()
@@ -106,5 +106,5 @@ def train_model(
     if scheduler is not None:
         scheduler.step()
 
-    plot_metrics["train_losses"].append(train_loss / len(train_DL))
+    plot_metrics["train_losses"].append(train_loss / len(train_DL.dataset))
     plot_metrics["train_epochs"].append(len(plot_metrics["train_epochs"]) + 1)
