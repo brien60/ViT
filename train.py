@@ -6,6 +6,8 @@ from torchvision.transforms import v2
 
 from tqdm import tqdm
 
+
+# TODO: enclose optimizer, loss_fn, device, scheduler, mixup, and grad_accum in TrainingConfig
 def train_model(
         model: Module,
         train_DL: DataLoader,
@@ -14,8 +16,9 @@ def train_model(
         device: str,
         pbar: tqdm,
         plot_metrics: dict[str, list],
-        scheduler: LRScheduler = None,
-        mixup: v2.Transform = None,
+        scheduler: LRScheduler | None = None,
+        mixup: v2.Transform | None = None,
+        grad_accum_steps: int = 1
 ) -> None:
     """Trains the given model on one epoch of the given train dataloader, computing and recording the training loss.
 
@@ -39,13 +42,18 @@ def train_model(
         scheduler: Learning rate scheduler to use
 
         mixup: Mixup transformation to apply
-    """
-    
-    train_loss = 0.0
 
+        grad_accum_steps: Specifies the number of gradient accumulation steps to be performed with a micro-batch size of `train_DL.batch_size`
+    """
+
+    assert grad_accum_steps >= 1, "grad_accum_steps must be greater than or equal to 1"
+    train_loss = 0.0
+    batch_group_samples = 0
+
+    optimizer.zero_grad()
     model.train()
-    for train_batch in train_DL:
-        x_train, y_train = train_batch
+
+    for i, (x_train, y_train) in enumerate(train_DL):
         x_train, y_train = x_train.to(device), y_train.to(device)
 
         # original_images = x_train.clone()
@@ -53,7 +61,7 @@ def train_model(
         if mixup is not None:
             x_train, y_train = mixup(x_train, y_train)
 
-        # plt.figure(figsize = (4, 16))
+        # plt.figure(figsize = (4,   16))
 
         # for i in range(10):
         #     idx = int(batch_size * torch.rand(1))
@@ -88,23 +96,32 @@ def train_model(
 
         # sys.exit(0)
         
-
-        optimizer.zero_grad()
-
         logits = model(x_train)
 
-        loss = loss_fn(logits, y_train)
-        train_loss += loss.item() * len(x_train)
+        batch_samples = len(x_train)
+
+        loss = loss_fn(logits, y_train) * batch_samples
+        train_loss += loss.detach()
 
         loss.backward()
-        optimizer.step()
 
-        pbar.update(len(x_train))
+        batch_group_samples += batch_samples
+
+        if (i+1) % grad_accum_steps == 0 or i+1 == len(train_DL):
+            for parameter in model.parameters():
+                if parameter.grad is not None:
+                    parameter.grad.div_(batch_group_samples)
+
+            optimizer.step()
+            optimizer.zero_grad()
+            batch_group_samples = 0
+
+        pbar.update(len(x_train))   
 
     pbar.close()
 
     if scheduler is not None:
         scheduler.step()
 
-    plot_metrics["train_losses"].append(train_loss / len(train_DL.dataset))
+    plot_metrics["train_losses"].append(train_loss.item() / len(train_DL.dataset))
     plot_metrics["train_epochs"].append(len(plot_metrics["train_epochs"]) + 1)
