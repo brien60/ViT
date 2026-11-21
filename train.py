@@ -3,6 +3,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
+from torch.profiler import profile
 
 import torch
 import time
@@ -26,7 +27,7 @@ def train_model(
 ) -> None:
     """Trains the given model on one epoch of the given train dataloader, computing and recording the training loss.
 
-    Can optionally apply MixUp on the training batches and/or use a learning rate scheduler
+    Can optionally apply MixUp on the training batches and/or use a learning rate scheduler.
 
     Args:
         model: Model to train on
@@ -78,12 +79,24 @@ def train_model(
     mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
     std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
 
+    # train_iter = iter(train_DL)
+    # access_times_all = []
+    # rgb_times_all = []
+    # transform_times_all = []
+
     if device == "cuda": torch.cuda.synchronize()
     start = time.perf_counter()
 
     for i, (x_train, y_train) in enumerate(train_DL):
     # for i in range(len(train_DL)):
-        
+
+        # x_train, y_train, access_times, rgb_times, transform_times = next(train_iter)
+
+        # access_times_all.extend(access_times.tolist())
+        # rgb_times_all.extend(rgb_times.tolist())
+        # transform_times_all.extend(transform_times.tolist())
+
+
         x_train = x_train.to(device, non_blocking=True)
         y_train = y_train.to(device, non_blocking=True)
 
@@ -91,45 +104,12 @@ def train_model(
         x_train.sub_(mean).div_(std)
         # x_train, y_train = dummy_x_train.to(device, non_blocking=True), dummy_y_train.to(device, non_blocking=True)
 
-        # original_images = x_train.clone()
-        # original_labels = y_train.clone()
+        # x_train = x_train.contiguous(
+        #     memory_format=torch.channels_last
+        # )
+        
         if mixup is not None:
-            x_train, y_train = mixup(x_train, y_train)
-
-        # plt.figure(figsize = (4,   16))
-
-        # for i in range(10):
-        #     idx = int(batch_size * torch.rand(1))
-
-        #     image_1 = original_images[idx].cpu()
-        #     image_2 = original_images[(idx-1) % batch_size].cpu()
-
-        #     label_1 = original_labels[idx].cpu()
-        #     label_2 = original_labels[(idx-1) % batch_size].cpu()
-
-        #     mixed_img = x_train[idx].cpu()
-
-        #     mean = torch.tensor([0.4914, 0.4822, 0.4465]).view(3, 1, 1)
-        #     std = torch.tensor([0.2470, 0.2435, 0.2616]).view(3, 1, 1)
-
-        #     lambda_1 = y_train[idx][label_1].item()
-        #     lambda_2 = y_train[idx][label_2].item()
-
-        #     for j, info in enumerate(zip(
-        #         [image_1, image_2, mixed_img],
-        #         [classes[label_1], classes[label_2], f"({lambda_1:.2f}, {lambda_2:.2f})"]
-        #     )):
-        #         img, title = info
-        #         img = img * std + mean
-
-        #         plt.subplot(10, 3, 3*i+(j+1))
-        #         plt.imshow(img.permute(1, 2, 0).clamp(0, 1))
-        #         plt.axis("off")
-        #         plt.title(title)
-
-        # plt.show()
-
-        # sys.exit(0)
+            x_train, y_train = mixup(x_train, y_train)  
         batch_samples = len(x_train)
 
         with torch.autocast(device, torch.bfloat16, enabled=autocast):
@@ -144,12 +124,28 @@ def train_model(
         window_samples += batch_samples
 
         if (i+1) % grad_accum_steps == 0 or i+1 == len(train_DL):
+            # torch.cuda.synchronize()
+            # start = time.perf_counter()
+
             for parameter in model.parameters():
                 if parameter.grad is not None:
                     parameter.grad.div_(batch_group_samples)
 
+            # torch.cuda.synchronize()
+            # print(f"Gradient normalization: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+
+            # torch.cuda.synchronize()
+            # start = time.perf_counter()
+
             optimizer.step()
+
+            # torch.cuda.synchronize()
+            # step_time = time.perf_counter() - start
+
             optimizer.zero_grad()
+
+            # print(f"Optimizer step: {step_time * 1000:.2f} ms")
             
             batch_group_samples = 0
 
@@ -164,8 +160,6 @@ def train_model(
 
         pbar.update(len(x_train))
 
-        
-
     pbar.close()
 
     if scheduler is not None:
@@ -173,3 +167,39 @@ def train_model(
 
     plot_metrics["train_losses"].append(train_loss.item() / len(train_DL.dataset))
     plot_metrics["train_epochs"].append(len(plot_metrics["train_epochs"]) + 1)
+
+    # import numpy as np
+
+
+    # access_times_all_ms = np.array(access_times_all) * 1000
+
+    # print("acesss times\n")
+    # print(f"Mean: {access_times_all_ms.mean():.2f} ms")
+    # print(f"Median: {np.median(access_times_all_ms):.2f} ms")
+    # print(f"P95: {np.percentile(access_times_all_ms, 95):.2f} ms")
+    # print(f"P99: {np.percentile(access_times_all_ms, 99):.2f} ms")
+    # print(f"Max: {access_times_all_ms.max():.2f} ms")
+    # print(f">10 ms: {(access_times_all_ms > 10).sum()}")
+    # print(f">100 ms: {(access_times_all_ms > 100).sum()}")
+
+    # rgb_times_all_ms = np.array(rgb_times_all) * 1000
+    
+    # print("rgb times\n")
+    # print(f"Mean: {rgb_times_all_ms.mean():.2f} ms")
+    # print(f"Median: {np.median(rgb_times_all_ms):.2f} ms")
+    # print(f"P95: {np.percentile(rgb_times_all_ms, 95):.2f} ms")
+    # print(f"P99: {np.percentile(rgb_times_all_ms, 99):.2f} ms")
+    # print(f"Max: {rgb_times_all_ms.max():.2f} ms")
+    # print(f">10 ms: {(rgb_times_all_ms > 10).sum()}")
+    # print(f">100 ms: {(rgb_times_all_ms > 100).sum()}")
+
+    # transform_times_all_ms = np.array(transform_times_all) * 1000
+        
+    # print("transform times\n")
+    # print(f"Mean: {transform_times_all_ms.mean():.2f} ms")
+    # print(f"Median: {np.median(transform_times_all_ms):.2f} ms")
+    # print(f"P95: {np.percentile(transform_times_all_ms, 95):.2f} ms")
+    # print(f"P99: {np.percentile(transform_times_all_ms, 99):.2f} ms")
+    # print(f"Max: {transform_times_all_ms.max():.2f} ms")
+    # print(f">10 ms: {(transform_times_all_ms > 10).sum()}")
+    # print(f">100 ms: {(transform_times_all_ms > 100).sum()}")
