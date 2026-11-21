@@ -4,6 +4,9 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 
+import torch
+import time
+
 from tqdm import tqdm
 
 
@@ -18,7 +21,8 @@ def train_model(
         plot_metrics: dict[str, list],
         scheduler: LRScheduler | None = None,
         mixup: v2.Transform | None = None,
-        grad_accum_steps: int = 1
+        grad_accum_steps: int = 1,
+        autocast: bool = True
 ) -> None:
     """Trains the given model on one epoch of the given train dataloader, computing and recording the training loss.
 
@@ -44,17 +48,48 @@ def train_model(
         mixup: Mixup transformation to apply
 
         grad_accum_steps: Specifies the number of gradient accumulation steps to be performed with a micro-batch size of `train_DL.batch_size`
+
+        autocast: Whether to use bf16 autocast mixed precision
     """
 
     assert grad_accum_steps >= 1, "grad_accum_steps must be greater than or equal to 1"
     train_loss = 0.0
     batch_group_samples = 0
+    window_samples = 0
 
     optimizer.zero_grad()
     model.train()
 
+    # GPU-only benchmark data
+    # dummy_x_train = torch.rand(
+    #     256, 3, 224, 224,
+    #     device=device,
+    #     dtype=torch.float32,
+    # )
+
+    # dummy_y_train = torch.randint(
+    #     low=0,
+    #     high=1000,
+    #     size=(256,),
+    #     device=device,
+    #     dtype=torch.long,
+    # )
+
+    mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
+    std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+
+    if device == "cuda": torch.cuda.synchronize()
+    start = time.perf_counter()
+
     for i, (x_train, y_train) in enumerate(train_DL):
-        x_train, y_train = x_train.to(device), y_train.to(device)
+    # for i in range(len(train_DL)):
+        
+        x_train = x_train.to(device, non_blocking=True)
+        y_train = y_train.to(device, non_blocking=True)
+
+        x_train = x_train.float().div_(255.0)
+        x_train.sub_(mean).div_(std)
+        # x_train, y_train = dummy_x_train.to(device, non_blocking=True), dummy_y_train.to(device, non_blocking=True)
 
         # original_images = x_train.clone()
         # original_labels = y_train.clone()
@@ -95,17 +130,18 @@ def train_model(
         # plt.show()
 
         # sys.exit(0)
-        
-        logits = model(x_train)
-
         batch_samples = len(x_train)
 
-        loss = loss_fn(logits, y_train) * batch_samples
+        with torch.autocast(device, torch.bfloat16, enabled=autocast):
+            logits = model(x_train)
+            loss = loss_fn(logits, y_train) * batch_samples
+
         train_loss += loss.detach()
 
         loss.backward()
 
         batch_group_samples += batch_samples
+        window_samples += batch_samples
 
         if (i+1) % grad_accum_steps == 0 or i+1 == len(train_DL):
             for parameter in model.parameters():
@@ -114,9 +150,21 @@ def train_model(
 
             optimizer.step()
             optimizer.zero_grad()
+            
             batch_group_samples = 0
 
-        pbar.update(len(x_train))   
+        if (i+1) % 512 == 0:
+            if device == "cuda": torch.cuda.synchronize()
+            elapsed = time.perf_counter() - start
+            
+            print(f"{window_samples / elapsed:.0f} images/s\n")
+            window_samples = 0
+
+            start = time.perf_counter()
+
+        pbar.update(len(x_train))
+
+        
 
     pbar.close()
 
