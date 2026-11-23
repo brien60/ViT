@@ -82,11 +82,11 @@ def evaluate_train_and_val(
             logits = model(x_val)
 
             loss = loss_fn(logits, y_val)
-            val_loss += loss.item() * len(x_val)
+            val_loss += loss.detach() * len(x_val)
             
             val_correct_preds += correct_preds(logits, y_val)
 
-    plot_metrics["val_losses"].append(val_loss / len(val_DL.dataset))
+    plot_metrics["val_losses"].append(val_loss.item() / len(val_DL.dataset))
     plot_metrics["train_accs"].append(100 * train_correct_preds / len(train_eval_DL.dataset))
     plot_metrics["val_accs"].append(100 * val_correct_preds / num_val_samples)
     plot_metrics["val_epochs"].append(epoch + 1)
@@ -123,12 +123,12 @@ def test_model(
 
             logits = model(x_test)
             loss = loss_fn(logits, y_test)
-            test_loss += loss.item() * len(x_test)
+            test_loss += loss.detach() * len(x_test)
             
             test_correct_preds += correct_preds(logits, y_test)
 
     print(test_correct_preds / len(test_DL.dataset))
-    print(test_loss / len(test_DL.dataset))
+    print(test_loss.item() / len(test_DL.dataset))
 
 
 

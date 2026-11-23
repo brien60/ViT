@@ -91,45 +91,11 @@ def train_model(
         x_train.sub_(mean).div_(std)
         # x_train, y_train = dummy_x_train.to(device, non_blocking=True), dummy_y_train.to(device, non_blocking=True)
 
-        # original_images = x_train.clone()
-        # original_labels = y_train.clone()
+        
         if mixup is not None:
             x_train, y_train = mixup(x_train, y_train)
 
-        # plt.figure(figsize = (4,   16))
-
-        # for i in range(10):
-        #     idx = int(batch_size * torch.rand(1))
-
-        #     image_1 = original_images[idx].cpu()
-        #     image_2 = original_images[(idx-1) % batch_size].cpu()
-
-        #     label_1 = original_labels[idx].cpu()
-        #     label_2 = original_labels[(idx-1) % batch_size].cpu()
-
-        #     mixed_img = x_train[idx].cpu()
-
-        #     mean = torch.tensor([0.4914, 0.4822, 0.4465]).view(3, 1, 1)
-        #     std = torch.tensor([0.2470, 0.2435, 0.2616]).view(3, 1, 1)
-
-        #     lambda_1 = y_train[idx][label_1].item()
-        #     lambda_2 = y_train[idx][label_2].item()
-
-        #     for j, info in enumerate(zip(
-        #         [image_1, image_2, mixed_img],
-        #         [classes[label_1], classes[label_2], f"({lambda_1:.2f}, {lambda_2:.2f})"]
-        #     )):
-        #         img, title = info
-        #         img = img * std + mean
-
-        #         plt.subplot(10, 3, 3*i+(j+1))
-        #         plt.imshow(img.permute(1, 2, 0).clamp(0, 1))
-        #         plt.axis("off")
-        #         plt.title(title)
-
-        # plt.show()
-
-        # sys.exit(0)
+       
         batch_samples = len(x_train)
 
         with torch.autocast(device, torch.bfloat16, enabled=autocast):
